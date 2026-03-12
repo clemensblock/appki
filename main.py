@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,6 +25,7 @@ from scheduler import start_scheduler, stop_scheduler
 from scrapers.rss_fetcher import fetch_all_rss_feeds
 from scrapers.firecrawl_scraper import collect_all_tools
 from scrapers.enrichment_agent import enrich_pending_tools
+from scrapers.news_enrichment import enrich_pending_news
 from database import SessionLocal
 
 # Logging konfigurieren
@@ -65,7 +67,7 @@ app = FastAPI(
 # CORS-Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://dev.app.ki", "http://dev.app.ki", "http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -779,10 +781,21 @@ async def root():
     return HTMLResponse(content=FRONTEND_HTML)
 
 
+@app.get("/health", tags=["System"], include_in_schema=False)
+async def health_check(db: Session = Depends(get_db)):
+    """Health-Check Endpoint fuer Monitoring."""
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception:
+        db_status = "error"
+    return {"status": "ok", "db": db_status, "version": "2.0.0"}
+
+
 @app.get("/api/status", response_model=StatusResponse, tags=["System"])
 async def get_status():
     """Status und Version der API."""
-    return StatusResponse(status="online", version="1.0.0", project="app.ki")
+    return StatusResponse(status="online", version="2.0.0", project="app.ki")
 
 
 @app.get("/api/stats", response_model=StatsResponse, tags=["System"])
@@ -806,11 +819,13 @@ async def fetch_now():
         rss_count = fetch_all_rss_feeds(db)
         collected_count = collect_all_tools(db)
         enrichment_result = enrich_pending_tools(db)
+        news_enrichment_result = enrich_pending_news(db)
         return {
             "status": "completed",
             "neue_news": rss_count,
             "neue_tools_gesammelt": collected_count,
             "enrichment": enrichment_result,
+            "news_enrichment": news_enrichment_result,
         }
     except Exception as e:
         logger.error(f"Fehler beim manuellen Fetch: {e}")

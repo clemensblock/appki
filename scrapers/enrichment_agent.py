@@ -7,21 +7,24 @@ Laedt Details fuer Tools nach, die vom Collector (Stufe 1) gesammelt wurden:
 3. Ergebnis in die Datenbank schreiben
 
 Status-Uebergaenge:
-  'pending' → 'done'   (erfolgreich angereichert)
-  'pending' → 'error'  (Fehler bei Scraping oder Extraktion)
+  'pending' -> 'done'   (erfolgreich angereichert)
+  'pending' -> 'error'  (Fehler bei Scraping oder Extraktion)
+
+Retry-Logik: Tools mit status='error' werden nach 24h automatisch erneut versucht (max 3 Retries).
 """
 
 import os
+import re
 import json
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import httpx
 from firecrawl import FirecrawlApp
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, and_
 
 from models import AiTools
 
@@ -29,20 +32,36 @@ logger = logging.getLogger(__name__)
 
 # Konfiguration aus Umgebungsvariablen
 ENRICHMENT_BATCH_SIZE = int(os.getenv("ENRICHMENT_BATCH_SIZE", "50"))
+MAX_RETRIES = 3
 SCRAPE_DELAY = 2  # Sekunden zwischen Tool-Scrapes
 
 # Claude API Konfiguration
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
-# Prompt fuer die Extraktion
-EXTRACTION_PROMPT = """Extrahiere aus diesem Text folgende Informationen als JSON:
-- description (kurze Beschreibung, max 200 Zeichen, auf Deutsch)
-- pricing ('free', 'freemium' oder 'paid')
-- category (z.B. 'image', 'text', 'coding', 'video', 'audio', 'productivity')
-- features (Liste der 3 wichtigsten Features, auf Deutsch)
-- target_audience (Zielgruppe, 1 Satz, auf Deutsch)
+# Prompt fuer die Extraktion — eigenstaendige deutsche Texte
+EXTRACTION_PROMPT = """Du bist Redakteur fuer eine fuehrende deutsche KI-Informationsplattform.
+Erstelle aus dem folgenden Text einen eigenstaendigen, professionellen Eintrag auf Deutsch.
+
+Gib das Ergebnis als JSON zurueck mit genau diesen Feldern:
+- "description": Professionelle Beschreibung auf Deutsch, 2-3 Saetze, max 300 Zeichen. Erklaere was das Tool macht und fuer wen es geeignet ist.
+- "pricing": Exakt einer der Werte 'free', 'freemium' oder 'paid'
+- "category": Hauptkategorie (z.B. 'Bildgenerierung', 'Textgenerierung', 'Coding', 'Video', 'Audio', 'Produktivitaet', 'Marketing', 'Bildung', 'Business', 'Chatbot')
+- "features": Liste der 3 wichtigsten Features, jeweils auf Deutsch, kurz und praegnant
+- "target_audience": Zielgruppe, 1 Satz auf Deutsch
+- "website_url": Die echte Website-URL des Tools (nicht die Verzeichnis-URL). Falls im Text vorhanden.
+
+WICHTIG: Schreibe eigenstaendige, professionelle Texte. Keine 1:1 Uebersetzung.
 Antworte NUR mit validem JSON, kein Text drumherum."""
+
+
+def _generate_slug(name: str) -> str:
+    """Erzeugt einen URL-freundlichen Slug aus dem Tool-Namen."""
+    slug = name.lower().strip()
+    slug = re.sub(r"[^a-z0-9\s-]", "", slug)
+    slug = re.sub(r"[\s]+", "-", slug)
+    slug = re.sub(r"-+", "-", slug).strip("-")
+    return slug[:220]
 
 
 def _get_anthropic_key() -> Optional[str]:
@@ -71,7 +90,6 @@ def _scrape_tool_page(client: FirecrawlApp, url: str) -> Optional[str]:
         if not markdown:
             logger.warning(f"Enrichment: Kein Markdown fuer {url}")
             return None
-        # Markdown auf 8000 Zeichen begrenzen (API-Token sparen)
         if len(markdown) > 8000:
             markdown = markdown[:8000]
         return markdown
@@ -83,7 +101,6 @@ def _scrape_tool_page(client: FirecrawlApp, url: str) -> Optional[str]:
 def _extract_with_claude(markdown: str, tool_name: str, anthropic_key: str) -> Optional[dict]:
     """
     Schickt das Markdown an die Claude API und extrahiert strukturierte Daten.
-    Gibt ein Dict mit description, pricing, category, features, target_audience zurueck.
     """
     try:
         headers = {
@@ -94,7 +111,7 @@ def _extract_with_claude(markdown: str, tool_name: str, anthropic_key: str) -> O
 
         payload = {
             "model": CLAUDE_MODEL,
-            "max_tokens": 500,
+            "max_tokens": 600,
             "messages": [
                 {
                     "role": "user",
@@ -114,13 +131,9 @@ def _extract_with_claude(markdown: str, tool_name: str, anthropic_key: str) -> O
             logger.warning(f"Enrichment: Leere Antwort von Claude fuer {tool_name}")
             return None
 
-        # JSON aus der Antwort extrahieren
-        # Claude antwortet manchmal mit Markdown-Code-Bloecken
         clean_text = content_text.strip()
         if clean_text.startswith("```"):
-            # Code-Block entfernen
             lines = clean_text.split("\n")
-            # Erste und letzte Zeile (```) entfernen
             json_lines = []
             in_block = False
             for line in lines:
@@ -147,7 +160,7 @@ def _extract_with_claude(markdown: str, tool_name: str, anthropic_key: str) -> O
         return None
 
 
-def _update_tool(db: Session, tool_id: int, data: dict) -> None:
+def _update_tool(db: Session, tool_id: int, tool_name: str, data: dict) -> None:
     """Aktualisiert ein Tool mit den extrahierten Daten und setzt status='done'."""
     description = data.get("description", "")
     if description and len(description) > 2000:
@@ -161,7 +174,7 @@ def _update_tool(db: Session, tool_id: int, data: dict) -> None:
 
     category = data.get("category", "")
     if category:
-        category = category.lower().strip()[:100]
+        category = category.strip()[:100]
 
     features = data.get("features")
     if features and not isinstance(features, list):
@@ -171,6 +184,12 @@ def _update_tool(db: Session, tool_id: int, data: dict) -> None:
     if target_audience and len(target_audience) > 500:
         target_audience = target_audience[:500]
 
+    website_url = data.get("website_url", "")
+    if website_url and not website_url.startswith("http"):
+        website_url = None
+
+    slug = _generate_slug(tool_name)
+
     db.execute(
         text("""
             UPDATE ai_tools SET
@@ -179,6 +198,8 @@ def _update_tool(db: Session, tool_id: int, data: dict) -> None:
                 category = :category,
                 features = :features,
                 target_audience = :target_audience,
+                website_url = :website_url,
+                slug = :slug,
                 status = 'done',
                 enriched_at = :enriched_at
             WHERE id = :tool_id
@@ -189,6 +210,8 @@ def _update_tool(db: Session, tool_id: int, data: dict) -> None:
             "category": category or None,
             "features": json.dumps(features) if features else None,
             "target_audience": target_audience or None,
+            "website_url": website_url or None,
+            "slug": slug,
             "enriched_at": datetime.now(timezone.utc),
             "tool_id": tool_id,
         },
@@ -197,9 +220,14 @@ def _update_tool(db: Session, tool_id: int, data: dict) -> None:
 
 
 def _mark_error(db: Session, tool_id: int) -> None:
-    """Setzt den Status eines Tools auf 'error'."""
+    """Setzt den Status eines Tools auf 'error' und erhoeht retry_count."""
     db.execute(
-        text("UPDATE ai_tools SET status = 'error' WHERE id = :tool_id"),
+        text("""
+            UPDATE ai_tools SET
+                status = 'error',
+                retry_count = COALESCE(retry_count, 0) + 1
+            WHERE id = :tool_id
+        """),
         {"tool_id": tool_id},
     )
     db.commit()
@@ -208,18 +236,7 @@ def _mark_error(db: Session, tool_id: int) -> None:
 def enrich_pending_tools(db: Session) -> dict:
     """
     Enrichment Agent (Stufe 2): Holt Details fuer alle Tools mit status='pending'.
-
-    Ablauf pro Tool:
-      1. Tool-URL mit Firecrawl scrapen
-      2. Markdown an Claude API schicken
-      3. Extrahierte Daten in DB schreiben (status → 'done')
-      4. Bei Fehler: status → 'error'
-
-    Rate Limiting: 2 Sekunden zwischen jedem Tool.
-    Batch-Groesse: maximal ENRICHMENT_BATCH_SIZE Tools pro Lauf.
-
-    Gibt ein Dict mit Statistiken zurueck:
-      {"enriched": N, "errors": M, "skipped": K}
+    Gibt ein Dict mit Statistiken zurueck.
     """
     anthropic_key = _get_anthropic_key()
     if not anthropic_key:
@@ -229,7 +246,6 @@ def enrich_pending_tools(db: Session) -> dict:
     if not firecrawl_client:
         return {"enriched": 0, "errors": 0, "skipped": 0, "error": "FIRECRAWL_API_KEY fehlt"}
 
-    # Pending Tools laden (aelteste zuerst, limitiert auf Batch-Groesse)
     pending_tools = (
         db.query(AiTools)
         .filter(AiTools.status == "pending")
@@ -251,26 +267,21 @@ def enrich_pending_tools(db: Session) -> dict:
         try:
             logger.info(f"Enrichment: Verarbeite '{tool.name}' ({tool.url})")
 
-            # 1. Tool-Seite scrapen
             markdown = _scrape_tool_page(firecrawl_client, tool.url)
             if not markdown:
-                logger.warning(f"Enrichment: Kein Inhalt fuer '{tool.name}' — markiere als error")
                 _mark_error(db, tool.id)
                 errors += 1
                 time.sleep(SCRAPE_DELAY)
                 continue
 
-            # 2. Mit Claude extrahieren
             data = _extract_with_claude(markdown, tool.name, anthropic_key)
             if not data:
-                logger.warning(f"Enrichment: Extraktion fehlgeschlagen fuer '{tool.name}' — markiere als error")
                 _mark_error(db, tool.id)
                 errors += 1
                 time.sleep(SCRAPE_DELAY)
                 continue
 
-            # 3. Tool aktualisieren
-            _update_tool(db, tool.id, data)
+            _update_tool(db, tool.id, tool.name, data)
             enriched += 1
             logger.info(f"Enrichment: '{tool.name}' erfolgreich angereichert")
 
@@ -282,8 +293,41 @@ def enrich_pending_tools(db: Session) -> dict:
                 db.rollback()
             errors += 1
 
-        # Rate Limiting
         time.sleep(SCRAPE_DELAY)
 
     logger.info(f"=== Enrichment abgeschlossen: {enriched} angereichert, {errors} Fehler ===")
     return {"enriched": enriched, "errors": errors, "skipped": 0}
+
+
+def retry_failed_tools(db: Session) -> dict:
+    """
+    Retry-Job: Versucht Tools mit status='error' erneut, sofern retry_count < MAX_RETRIES.
+    Setzt den Status zurueck auf 'pending', damit der naechste Enrichment-Lauf sie verarbeitet.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    retryable = (
+        db.query(AiTools)
+        .filter(
+            and_(
+                AiTools.status == "error",
+                AiTools.retry_count < MAX_RETRIES,
+            )
+        )
+        .all()
+    )
+
+    if not retryable:
+        logger.info("Retry: Keine retryable Tools vorhanden.")
+        return {"reset": 0}
+
+    reset_count = 0
+    for tool in retryable:
+        db.execute(
+            text("UPDATE ai_tools SET status = 'pending' WHERE id = :tool_id"),
+            {"tool_id": tool.id},
+        )
+        reset_count += 1
+
+    db.commit()
+    logger.info(f"Retry: {reset_count} Tools zurueck auf 'pending' gesetzt")
+    return {"reset": reset_count}

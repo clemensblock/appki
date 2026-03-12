@@ -63,9 +63,18 @@ def get_tools(
     return tools
 
 
+@router.get("/by-slug/{slug}", response_model=ToolResponse, summary="Tool nach Slug")
+def get_tool_by_slug(slug: str, db: Session = Depends(get_db)):
+    """Gibt ein einzelnes KI-Tool anhand seines Slugs zurueck."""
+    tool = db.query(AiTools).filter(AiTools.slug == slug).first()
+    if not tool:
+        raise HTTPException(status_code=404, detail="Tool nicht gefunden")
+    return tool
+
+
 @router.get("/{tool_id}", response_model=ToolResponse, summary="Einzelnes Tool")
 def get_tool_by_id(tool_id: int, db: Session = Depends(get_db)):
-    """Gibt ein einzelnes KI-Tool anhand seiner ID zurück."""
+    """Gibt ein einzelnes KI-Tool anhand seiner ID zurueck."""
     tool = db.query(AiTools).filter(AiTools.id == tool_id).first()
     if not tool:
         raise HTTPException(status_code=404, detail="Tool nicht gefunden")

@@ -16,10 +16,14 @@ class NewsBase(BaseModel):
     source: Optional[str] = None
     category: Optional[str] = None
     published_at: Optional[datetime] = None
+    title_de: Optional[str] = None
+    summary_de: Optional[str] = None
+    enrichment_status: Optional[str] = None
 
 class NewsResponse(NewsBase):
     id: int
     fetched_at: Optional[datetime] = None
+    enriched_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -29,8 +33,10 @@ class NewsResponse(NewsBase):
 
 class ToolBase(BaseModel):
     name: str
+    slug: Optional[str] = None
     description: Optional[str] = None
     url: Optional[str] = None
+    website_url: Optional[str] = None
     pricing: Optional[str] = None
     category: Optional[str] = None
     source: Optional[str] = None
