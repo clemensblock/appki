@@ -3,11 +3,11 @@ APScheduler-Konfiguration fuer automatische Scraping-Jobs.
 Laeuft direkt in FastAPI als AsyncIOScheduler.
 
 Jobs:
-  Alle 2h  — RSS-Feeds abrufen (06:00, 08:00, 10:00, 12:00, 14:00, 16:00, 18:00, 20:00)
-  07:00    — Collector (Stufe 1): Tool-Namen und URLs sammeln
-  08:00    — Enrichment Agent (Stufe 2): Details fuer pending Tools nachladen
-  08:30    — News Enrichment: Uebersetzung und Zusammenfassung auf Deutsch
-  09:00    — Retry fehlgeschlagener Tools
+  Alle 30min — RSS-Feeds abrufen (22 Quellen, maximale Aktualitaet)
+  07:00     — Collector (Stufe 1): Tool-Namen und URLs sammeln
+  08:00     — Enrichment Agent (Stufe 2): Details fuer pending Tools nachladen
+  Alle 30min — News Enrichment: Uebersetzung und Zusammenfassung auf Deutsch (+15min offset)
+  09:00     — Retry fehlgeschlagener Tools
 """
 
 import logging
@@ -26,7 +26,7 @@ scheduler = AsyncIOScheduler()
 
 
 def job_fetch_rss():
-    """Job: Alle RSS-Feeds abrufen (alle 2 Stunden)."""
+    """Job: Alle RSS-Feeds abrufen (alle 30 Minuten)."""
     logger.info("=== Scheduler-Job gestartet: RSS-Feed-Abruf ===")
     db = SessionLocal()
     try:
@@ -92,12 +92,12 @@ def job_retry_tools():
 
 def start_scheduler():
     """Startet den Scheduler mit allen konfigurierten Jobs."""
-    # RSS-Feeds alle 2 Stunden abrufen (kostenlos, maximale Aktualitaet)
+    # RSS-Feeds alle 30 Minuten abrufen (kostenlos, maximale Aktualitaet)
     scheduler.add_job(
         job_fetch_rss,
-        trigger=CronTrigger(hour="6,8,10,12,14,16,18,20", minute=0),
+        trigger=CronTrigger(minute="0,30"),
         id="fetch_rss",
-        name="RSS-Feed-Abruf (alle 2h)",
+        name="RSS-Feed-Abruf (alle 30min)",
         replace_existing=True,
     )
 
@@ -119,12 +119,12 @@ def start_scheduler():
         replace_existing=True,
     )
 
-    # News-Enrichment: Uebersetzung und Zusammenfassung um 08:30 Uhr
+    # News-Enrichment: Uebersetzung und Zusammenfassung alle 30 Minuten (+15min offset)
     scheduler.add_job(
         job_enrich_news,
-        trigger=CronTrigger(hour="6,8,10,12,14,16,18,20", minute=30),
+        trigger=CronTrigger(minute="15,45"),
         id="enrich_news",
-        name="News-Enrichment (Deutsch)",
+        name="News-Enrichment (alle 30min)",
         replace_existing=True,
     )
 
@@ -140,8 +140,8 @@ def start_scheduler():
     scheduler.start()
     logger.info(
         "Scheduler gestartet mit Jobs: "
-        "fetch_rss (alle 2h), collect_tools (07:00), enrich_tools (08:00), "
-        "enrich_news (alle 2h +30min), retry_tools (09:00)"
+        "fetch_rss (alle 30min), collect_tools (07:00), enrich_tools (08:00), "
+        "enrich_news (alle 30min +15min), retry_tools (09:00)"
     )
 
 

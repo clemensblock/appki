@@ -49,8 +49,8 @@ export default async function HomePage() {
                   <div className="mt-1 text-xs font-medium uppercase tracking-wider text-gray-500">KI-Apps</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-3xl font-extrabold text-gradient">11</div>
-                  <div className="mt-1 text-xs font-medium uppercase tracking-wider text-gray-500">Quellen</div>
+                    <div className="text-3xl font-extrabold text-gradient">18</div>
+                    <div className="mt-1 text-xs font-medium uppercase tracking-wider text-gray-500">Quellen</div>
                 </div>
               </div>
             </div>

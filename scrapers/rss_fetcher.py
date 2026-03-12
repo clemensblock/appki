@@ -1,7 +1,7 @@
 """
 RSS-Fetcher fuer KI-News aus verschiedenen Quellen.
 Nutzt feedparser — kein Firecrawl noetig, RSS ist direkt kostenlos.
-Laeuft alle 2 Stunden fuer maximale Aktualitaet.
+Laeuft alle 30 Minuten fuer maximale Aktualitaet.
 """
 
 import re
@@ -18,8 +18,9 @@ from models import AiNews
 logger = logging.getLogger(__name__)
 
 # Konfiguration der RSS-Feeds mit differenzierten Kategorien
+# Fokus: US-amerikanische Tech- und KI-Quellen fuer maximale Aktualitaet
 RSS_FEEDS: List[Dict[str, str]] = [
-    # Grosse Tech-News-Portale
+    # === Grosse US Tech-News-Portale ===
     {
         "name": "techcrunch",
         "url": "https://techcrunch.com/category/artificial-intelligence/feed/",
@@ -27,7 +28,7 @@ RSS_FEEDS: List[Dict[str, str]] = [
     },
     {
         "name": "venturebeat",
-        "url": "https://venturebeat.com/ai/feed/",
+        "url": "https://venturebeat.com/category/ai/feed/",
         "category": "enterprise",
     },
     {
@@ -45,7 +46,22 @@ RSS_FEEDS: List[Dict[str, str]] = [
         "url": "https://www.wired.com/feed/tag/ai/latest/rss",
         "category": "industry",
     },
-    # KI-spezifische Quellen
+    {
+        "name": "engadget",
+        "url": "https://www.engadget.com/rss.xml",
+        "category": "industry",
+    },
+    {
+        "name": "zdnet",
+        "url": "https://www.zdnet.com/topic/artificial-intelligence/rss.xml",
+        "category": "enterprise",
+    },
+    {
+        "name": "cnet",
+        "url": "https://www.cnet.com/rss/news/",
+        "category": "industry",
+    },
+    # === KI-spezifische US-Quellen ===
     {
         "name": "ai-news",
         "url": "https://www.artificialintelligence-news.com/feed/",
@@ -56,7 +72,12 @@ RSS_FEEDS: List[Dict[str, str]] = [
         "url": "https://rss.beehiiv.com/feeds/2R3C6Bxd1D",
         "category": "newsletter",
     },
-    # Hersteller-Blogs
+    {
+        "name": "marktechpost",
+        "url": "https://www.marktechpost.com/feed/",
+        "category": "research",
+    },
+    # === Hersteller-Blogs (US) ===
     {
         "name": "openai",
         "url": "https://openai.com/news/rss.xml",
@@ -68,15 +89,30 @@ RSS_FEEDS: List[Dict[str, str]] = [
         "category": "releases",
     },
     {
+        "name": "nvidia-ai",
+        "url": "https://blogs.nvidia.com/feed/",
+        "category": "releases",
+    },
+    {
+        "name": "microsoft-ai",
+        "url": "https://blogs.microsoft.com/ai/feed/",
+        "category": "releases",
+    },
+    {
         "name": "huggingface",
         "url": "https://huggingface.co/blog/feed.xml",
         "category": "research",
     },
-    # Forschung
+    # === Forschung & Analyse ===
     {
         "name": "mit-tech-review",
         "url": "https://www.technologyreview.com/feed/",
         "category": "research",
+    },
+    {
+        "name": "bensbites",
+        "url": "https://rss.beehiiv.com/feeds/GBcFGRHEgR",
+        "category": "newsletter",
     },
 ]
 
