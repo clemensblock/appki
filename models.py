@@ -4,6 +4,7 @@ Tabellen: ai_news und ai_tools
 """
 
 from sqlalchemy import Column, Integer, String, Text, DateTime, func
+from sqlalchemy.dialects.postgresql import JSONB
 from database import Base
 
 
@@ -35,7 +36,11 @@ class AiTools(Base):
     pricing = Column(String(50), nullable=True)        # z.B. 'free', 'freemium', 'paid'
     category = Column(String(100), nullable=True)      # z.B. 'image', 'text', 'coding', 'video'
     source = Column(String(100), nullable=True)        # z.B. 'futurepedia', 'futuretools'
+    status = Column(String(20), server_default="pending")  # 'pending', 'done', 'error'
+    features = Column(JSONB, nullable=True)            # Liste der wichtigsten Features (JSON-Array)
+    target_audience = Column(Text, nullable=True)      # Zielgruppe, 1 Satz
     fetched_at = Column(DateTime(timezone=True), server_default=func.now())
+    enriched_at = Column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self):
-        return f"<AiTools(id={self.id}, name='{self.name}', source='{self.source}')>"
+        return f"<AiTools(id={self.id}, name='{self.name}', status='{self.status}')>"

@@ -34,10 +34,14 @@ class ToolBase(BaseModel):
     pricing: Optional[str] = None
     category: Optional[str] = None
     source: Optional[str] = None
+    status: Optional[str] = None
+    features: Optional[list] = None
+    target_audience: Optional[str] = None
 
 class ToolResponse(ToolBase):
     id: int
     fetched_at: Optional[datetime] = None
+    enriched_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

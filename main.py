@@ -24,7 +24,8 @@ from schemas import StatsResponse, StatusResponse
 from routers import news, tools
 from scheduler import start_scheduler, stop_scheduler
 from scrapers.rss_fetcher import fetch_all_rss_feeds
-from scrapers.firecrawl_scraper import scrape_all_tools
+from scrapers.firecrawl_scraper import collect_all_tools
+from scrapers.enrichment_agent import enrich_pending_tools
 from database import SessionLocal
 
 # Logging konfigurieren
@@ -813,16 +814,22 @@ async def get_stats(db: Session = Depends(get_db)):
 
 @app.post("/api/admin/fetch-now", tags=["Admin"])
 async def fetch_now():
-    """Startet alle Scraper sofort (für Tests und manuelle Aktualisierung)."""
-    logger.info("Manueller Scraper-Start ausgelöst via /api/admin/fetch-now")
+    """Startet alle Scraper sofort (fuer Tests und manuelle Aktualisierung).
+    Fuehrt die 2-Stufen-Pipeline aus:
+      1. Collector — sammelt Tool-Namen und URLs
+      2. Enrichment Agent — holt Details fuer pending Tools
+    """
+    logger.info("Manueller Scraper-Start ausgeloest via /api/admin/fetch-now")
     db = SessionLocal()
     try:
         rss_count = fetch_all_rss_feeds(db)
-        tools_count = scrape_all_tools(db)
+        collected_count = collect_all_tools(db)
+        enrichment_result = enrich_pending_tools(db)
         return {
             "status": "completed",
             "neue_news": rss_count,
-            "neue_tools": tools_count,
+            "neue_tools_gesammelt": collected_count,
+            "enrichment": enrichment_result,
         }
     except Exception as e:
         logger.error(f"Fehler beim manuellen Fetch: {e}")
