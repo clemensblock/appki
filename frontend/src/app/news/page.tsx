@@ -6,7 +6,7 @@ import { fetchNews } from '@/lib/api'
 
 export const metadata: Metadata = {
   title: 'KI-News',
-  description: 'Aktuelle Nachrichten aus der Welt der Kuenstlichen Intelligenz — taeglich aktualisiert aus den wichtigsten internationalen Quellen.',
+  description: 'Aktuelle Nachrichten aus der Welt der Künstlichen Intelligenz — täglich aktualisiert aus den wichtigsten internationalen Quellen.',
 }
 
 export const dynamic = 'force-dynamic'
@@ -24,7 +24,7 @@ export default async function NewsPage() {
             KI-News
           </h1>
           <p className="mt-3 text-gray-400">
-            Aktuelle Nachrichten aus der Welt der Kuenstlichen Intelligenz — automatisch uebersetzt und zusammengefasst.
+            Aktuelle Nachrichten aus der Welt der Künstlichen Intelligenz — automatisch übersetzt und zusammengefasst.
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

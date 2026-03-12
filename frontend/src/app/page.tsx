@@ -32,12 +32,12 @@ export default async function HomePage() {
                 Automatisch aktualisiert
               </div>
               <h1 className="mt-6 text-4xl font-extrabold tracking-tight sm:text-6xl">
-                Die fuehrende Plattform fuer{' '}
+                Die führende Plattform für{' '}
                 <span className="text-gradient">KI-Apps & News</span>
               </h1>
               <p className="mx-auto mt-6 max-w-2xl text-lg text-gray-400">
-                Entdecke die besten KI-Tools, aktuelle News und Trends — taeglich automatisch
-                aktualisiert aus den wichtigsten internationalen Quellen. Alles auf Deutsch.
+                                Entdecke die besten KI-Tools, aktuelle News und Trends — täglich automatisch
+                                aktualisiert aus den wichtigsten internationalen Quellen. Alles auf Deutsch.
               </p>
               <div className="mt-10 flex justify-center gap-12">
                 <div className="text-center">
