@@ -1,0 +1,17 @@
+[Unit]
+Description=app.ki FastAPI Service
+After=network.target postgresql.service nginx.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/appki
+EnvironmentFile=/opt/appki/.env
+ExecStart=/opt/appki/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
