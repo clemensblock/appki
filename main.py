@@ -4,7 +4,6 @@ Plattform für KI-News und KI-Tools, automatisch gesammelt aus amerikanischen Qu
 """
 
 import os
-import secrets
 import logging
 from contextlib import asynccontextmanager
 
@@ -12,7 +11,6 @@ from fastapi import FastAPI, Depends, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
@@ -36,23 +34,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Passwortschutz — einfache HTTP Basic Auth fuer Entwicklung
-SITE_USERNAME = os.getenv("SITE_USERNAME", "admin")
-SITE_PASSWORD = os.getenv("SITE_PASSWORD", "appki2026!")
-security = HTTPBasic()
-
-
-def verify_credentials(credentials: HTTPBasicCredentials = Depends(security)):
-    """Prueft HTTP Basic Auth Zugangsdaten."""
-    correct_user = secrets.compare_digest(credentials.username.encode(), SITE_USERNAME.encode())
-    correct_pass = secrets.compare_digest(credentials.password.encode(), SITE_PASSWORD.encode())
-    if not (correct_user and correct_pass):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Zugang verweigert",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials.username
 
 
 @asynccontextmanager
@@ -793,8 +774,8 @@ FRONTEND_HTML = """<!DOCTYPE html>
 # --- API Endpoints ---
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
-async def root(username: str = Depends(verify_credentials)):
-    """Startseite — moderne Weboberflaeche fuer app.ki (passwortgeschuetzt)"""
+async def root():
+    """Startseite — moderne Weboberflaeche fuer app.ki"""
     return HTMLResponse(content=FRONTEND_HTML)
 
 
